@@ -19,8 +19,8 @@ const createAdmin = async () => {
     console.log("✅ Admins table ready\n");
 
     // ── Change these values as you like ──────────────────────────────────
-    const username = "ashirvachana_admin";
-    const email = "admin@ashirvachana.com"; // ← change this to your real email
+    const username = "Kamalakar.k@gmail.com";
+    const email = "Kamalakar.k@gmail.com"; // ← change this to your real email
     const password = "divine@admin2026"; // ← change to a strong password
     // ─────────────────────────────────────────────────────────────────────
 

@@ -2,36 +2,37 @@ const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
-const nodemailer = require("nodemailer");
+// const nodemailer = require("nodemailer");
 const { Admin } = require("../models");
 const { adminProtect } = require("../middleware/auth");
+const { transporter } = require("../utils/emailService");
 require("dotenv").config();
 
 // ─── Nodemailer SMTP Transporter ──────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT) || 587,
-  secure: process.env.SMTP_SECURE === "true", // true for port 465, false for 587
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false, // prevents self-signed cert errors in dev
-  },
-});
+// const transporter = nodemailer.createTransport({
+//   host: process.env.SMTP_HOST,
+//   port: parseInt(process.env.SMTP_PORT) || 587,
+//   secure: process.env.SMTP_SECURE === "true", // true for port 465, false for 587
+//   auth: {
+//     user: process.env.SMTP_USER,
+//     pass: process.env.SMTP_PASS,
+//   },
+//   tls: {
+//     rejectUnauthorized: false, // prevents self-signed cert errors in dev
+//   },
+// });
 
 // Verify SMTP on startup — shows real error in console so you know exactly what's wrong
-transporter.verify((error) => {
-  if (error) {
-    console.error("❌ SMTP connection failed:", error.message);
-    console.error(
-      "   Fix: Check SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS in your .env",
-    );
-  } else {
-    console.log("✅ SMTP transporter ready — emails will work");
-  }
-});
+// transporter.verify((error) => {
+//   if (error) {
+//     console.error("❌ SMTP connection failed:", error.message);
+//     console.error(
+//       "   Fix: Check SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS in your .env",
+//     );
+//   } else {
+//     console.log("✅ SMTP transporter ready — emails will work");
+//   }
+// });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const generateAdminToken = (admin) => {
@@ -73,12 +74,10 @@ router.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Username and password are required",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Username and password are required",
+      });
     }
     const admin = await Admin.findOne({ where: { username } });
     if (!admin) {
@@ -182,12 +181,10 @@ router.post("/verify-otp", async (req, res) => {
       return res.status(400).json({ success: false, message: "Incorrect OTP" });
     }
     if (new Date() > new Date(admin.otp_expires_at)) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "OTP has expired. Please request a new one.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "OTP has expired. Please request a new one.",
+      });
     }
     const resetToken = jwt.sign(
       { adminId: admin.id, purpose: "password_reset" },
@@ -210,31 +207,25 @@ router.post("/reset-password", async (req, res) => {
   try {
     const { reset_token, new_password } = req.body;
     if (!reset_token || !new_password) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Reset token and new password are required",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Reset token and new password are required",
+      });
     }
     if (new_password.length < 8) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Password must be at least 8 characters",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters",
+      });
     }
     let decoded;
     try {
       decoded = jwt.verify(reset_token, process.env.ADMIN_JWT_SECRET);
     } catch {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Reset token is invalid or expired. Please start over.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Reset token is invalid or expired. Please start over.",
+      });
     }
     if (decoded.purpose !== "password_reset") {
       return res

@@ -55,4 +55,35 @@ const adminProtect = (req, res, next) => {
   }
 };
 
-module.exports = { protect, adminProtect };
+// ─── Optional User Auth (for guest checkout) ───────────────────────────────────
+// Tries to load user from token; does not fail if no token (req.user may be undefined)
+const optionalAuth = async (req, res, next) => {
+  let token;
+
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findByPk(decoded.id, {
+      attributes: { exclude: ['password'] }
+    });
+
+    if (!user || !user.is_active) {
+      req.user = null;
+    } else {
+      req.user = user;
+    }
+  } catch {
+    req.user = null;
+  }
+  next();
+};
+
+module.exports = { protect, adminProtect, optionalAuth };

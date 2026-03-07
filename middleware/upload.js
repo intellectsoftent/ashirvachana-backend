@@ -39,7 +39,6 @@ const fileFilter = (req, file, cb) => {
 const storage = multerS3({
   s3: s3,
   bucket: process.env.AWS_BUCKET,
-  acl: "public-read",
 
   metadata: function (req, file, cb) {
     cb(null, { fieldName: file.fieldname });

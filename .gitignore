@@ -6,3 +6,5 @@ logs/
 *.log
 .DS_Store
 .env
+.env.*
+.env.production

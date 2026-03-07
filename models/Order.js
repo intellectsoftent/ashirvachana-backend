@@ -14,7 +14,7 @@ const Order = sequelize.define('Order', {
   },
   user_id: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: true  // null for guest orders (e.g. pooja without login)
   },
   order_type: {
     type: DataTypes.ENUM('pooja', 'idol', 'mixed'),
