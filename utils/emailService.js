@@ -203,4 +203,175 @@ const sendBookingNotificationToAdmin = async (order, orderItems, buyer) => {
   );
 };
 
-module.exports = { transporter, sendBookingNotificationToAdmin };
+// ─── Send Order Confirmation to Customer ─────────────────────────────────────
+/**
+ * @param {Object} order      - The saved order object (from DB)
+ * @param {Array}  orderItems - Array of order_items for this order
+ */
+const sendOrderConfirmationToCustomer = async (order, orderItems) => {
+  const customerEmail = order.customer_email;
+  if (!customerEmail) {
+    console.warn("⚠️  No customer email on order — skipping customer confirmation");
+    return;
+  }
+
+  const itemRows = orderItems
+    .map(
+      (item) => `
+      <tr>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #f3f4f6;">
+          ${item.item_type === "pooja" ? "🪔" : "🕉️"}
+          <strong>${item.item_name}</strong>
+        </td>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #f3f4f6; text-align:center;">${item.quantity}</td>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #f3f4f6; text-align:right;">₹${Number(item.unit_price).toLocaleString(
+          "en-IN",
+        )}</td>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #f3f4f6; text-align:right; font-weight:600;">₹${Number(
+          item.total_price,
+        ).toLocaleString("en-IN")}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const poojaDetails = order.pooja_date
+    ? `
+      <tr>
+        <td style="padding:6px 0; color:#6b7280; width:140px;">Pooja Date</td>
+        <td style="padding:6px 0; font-weight:600; color:#111827;">${new Date(order.pooja_date).toLocaleDateString(
+          "en-IN",
+          { day: "numeric", month: "long", year: "numeric" },
+        )}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0; color:#6b7280;">Pooja Time</td>
+        <td style="padding:6px 0; font-weight:600; color:#111827;">${order.pooja_time || "—"}</td>
+      </tr>`
+    : "";
+
+  const html = `
+  <!DOCTYPE html>
+  <html>
+  <head><meta charset="utf-8"/></head>
+  <body style="margin:0;padding:0;background:#f9fafb;font-family:Arial,sans-serif;">
+    <div style="max-width:620px;margin:32px auto;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+
+      <div style="background:linear-gradient(135deg,#16a34a,#15803d);padding:24px 28px;">
+        <h1 style="margin:0;color:#fff;font-size:22px;letter-spacing:0.4px;">Ashirvachana</h1>
+        <p style="margin:6px 0 0;color:#dcfce7;font-size:14px;">Your booking is confirmed</p>
+      </div>
+
+      <div style="padding:24px 28px 8px;">
+        <p style="margin:0 0 12px;font-size:14px;color:#374151;">Namaste ${order.customer_name || ""},</p>
+        <p style="margin:0 0 20px;font-size:14px;color:#4b5563;">
+          Thank you for choosing <strong>Ashirvachana</strong>. Your booking has been received successfully.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:18px;">
+          <tr>
+            <td style="padding:4px 0; color:#6b7280; width:140px;">Order Number</td>
+            <td style="padding:4px 0; font-weight:600; color:#111827;">${order.order_number}</td>
+          </tr>
+          <tr>
+            <td style="padding:4px 0; color:#6b7280;">Order Type</td>
+            <td style="padding:4px 0; font-weight:600; color:#111827; text-transform:capitalize;">${order.order_type}</td>
+          </tr>
+          ${poojaDetails}
+        </table>
+
+        <h2 style="margin:16px 0 10px;font-size:15px;color:#374151;">Items</h2>
+        <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:18px;">
+          <thead>
+            <tr style="background:#f9fafb;">
+              <th style="padding:8px 10px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;">Item</th>
+              <th style="padding:8px 10px;text-align:center;font-size:13px;color:#6b7280;font-weight:600;">Qty</th>
+              <th style="padding:8px 10px;text-align:right;font-size:13px;color:#6b7280;font-weight:600;">Unit</th>
+              <th style="padding:8px 10px;text-align:right;font-size:13px;color:#6b7280;font-weight:600;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemRows}
+          </tbody>
+        </table>
+
+        <h2 style="margin:16px 0 10px;font-size:15px;color:#374151;">Payment Summary</h2>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+          <tr>
+            <td style="padding:4px 0; color:#6b7280;">Total Amount</td>
+            <td style="padding:4px 0; text-align:right; color:#111827; font-weight:600;">₹${Number(
+              order.total_amount,
+            ).toLocaleString("en-IN")}</td>
+          </tr>
+          ${
+            Number(order.advance_amount) > 0
+              ? `
+          <tr>
+            <td style="padding:4px 0; color:#6b7280;">Paid Now</td>
+            <td style="padding:4px 0; text-align:right; color:#15803d; font-weight:600;">₹${Number(
+              order.advance_amount,
+            ).toLocaleString("en-IN")}</td>
+          </tr>`
+              : ""
+          }
+          ${
+            Number(order.pending_amount) > 0
+              ? `
+          <tr>
+            <td style="padding:4px 0; color:#6b7280;">Pending Amount</td>
+            <td style="padding:4px 0; text-align:right; color:#b45309; font-weight:600;">₹${Number(
+              order.pending_amount,
+            ).toLocaleString("en-IN")}</td>
+          </tr>`
+              : ""
+          }
+          <tr>
+            <td style="padding:6px 0; color:#6b7280;">Payment Status</td>
+            <td style="padding:6px 0; text-align:right;">
+              <span style="background:${
+                order.payment_status === "paid" ? "#dcfce7" : order.payment_status === "partial" ? "#fef9c3" : "#fee2e2"
+              };color:${
+                order.payment_status === "paid"
+                  ? "#16a34a"
+                  : order.payment_status === "partial"
+                  ? "#92400e"
+                  : "#b91c1c"
+              };padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;text-transform:capitalize;">
+                ${order.payment_status}
+              </span>
+            </td>
+          </tr>
+        </table>
+
+        <p style="margin:0 0 6px;font-size:13px;color:#4b5563;">
+          Our team will contact you shortly with further details and coordination.
+        </p>
+        <p style="margin:0 0 18px;font-size:13px;color:#4b5563;">
+          For any queries, you can reply to this email.
+        </p>
+      </div>
+
+      <div style="background:#f9fafb;padding:14px 28px;border-top:1px solid #e5e7eb;text-align:center;">
+        <p style="margin:0;font-size:11px;color:#9ca3af;">
+          This is an automated confirmation from Ashirvachana. Booked on ${new Date().toLocaleString("en-IN", {
+            timeZone: "Asia/Kolkata",
+          })} IST.
+        </p>
+      </div>
+
+    </div>
+  </body>
+  </html>`;
+
+  await transporter.sendMail({
+    from: `"Ashirvachana" <${process.env.SMTP_USER}>`,
+    to: customerEmail,
+    subject: `Your Ashirvachana booking ${order.order_number}`,
+    html,
+  });
+
+  console.log(
+    `📧 Customer booking confirmation sent to ${customerEmail} for order ${order.order_number}`,
+  );
+};
+
+module.exports = { transporter, sendBookingNotificationToAdmin, sendOrderConfirmationToCustomer };

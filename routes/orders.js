@@ -6,7 +6,10 @@ const { protect, adminProtect, optionalAuth } = require("../middleware/auth");
 const Razorpay = require("razorpay");
 const { Op } = require("sequelize");
 require("dotenv").config();
-const { sendBookingNotificationToAdmin } = require("../utils/emailService");
+const {
+  sendBookingNotificationToAdmin,
+  sendOrderConfirmationToCustomer,
+} = require("../utils/emailService");
 
 // Helper to generate order number
 const generateOrderNumber = () => {
@@ -83,6 +86,7 @@ router.post("/place", optionalAuth, async (req, res) => {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
+      paid_amount,
     } = req.body;
 
     if (!items || items.length === 0) {
@@ -178,6 +182,32 @@ router.post("/place", optionalAuth, async (req, res) => {
       });
     }
 
+    // Determine paid vs partial amount (for advance payments)
+    let advance_amount = 0;
+    let pending_amount = 0;
+    if (payment_status === "paid") {
+      const numericPaid =
+        typeof paid_amount === "number" ? paid_amount : Number(paid_amount || total_amount);
+      if (!Number.isFinite(numericPaid) || numericPaid <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid paid amount.",
+        });
+      }
+      if (numericPaid > total_amount) {
+        return res.status(400).json({
+          success: false,
+          message: "Paid amount cannot exceed total amount.",
+        });
+      }
+      advance_amount = numericPaid;
+      pending_amount = Math.max(total_amount - numericPaid, 0);
+
+      if (pending_amount > 0.01) {
+        payment_status = "partial";
+      }
+    }
+
     // Create order
     const order = await Order.create({
       order_number: generateOrderNumber(),
@@ -194,8 +224,8 @@ router.post("/place", optionalAuth, async (req, res) => {
       subtotal,
       tax_amount,
       total_amount,
-      advance_amount: 0,
-      pending_amount: 0,
+      advance_amount,
+      pending_amount,
       payment_status,
       payment_method,
       razorpay_order_id,
@@ -240,13 +270,18 @@ router.post("/place", optionalAuth, async (req, res) => {
       },
     });
 
-    // Send admin email notification for all bookings (fire-and-forget)
+    // Send admin & customer email notifications (fire-and-forget)
     const buyer = req.user
       ? { name: req.user.name, email: req.user.email, phone: req.user.phone }
       : { name: order.customer_name, email: order.customer_email, phone: order.customer_phone };
-    sendBookingNotificationToAdmin(order, savedOrderItems, buyer).catch(
-      (err) => console.error("⚠️  Admin booking email failed:", err.message),
+    sendBookingNotificationToAdmin(order, savedOrderItems, buyer).catch((err) =>
+      console.error("⚠️  Admin booking email failed:", err.message),
     );
+    if (order.customer_email) {
+      sendOrderConfirmationToCustomer(order, savedOrderItems).catch((err) =>
+        console.error("⚠️  Customer booking email failed:", err.message),
+      );
+    }
   } catch (error) {
     console.error("Order error:", error);
     res.status(500).json({ success: false, message: error.message });
