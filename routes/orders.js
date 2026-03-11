@@ -87,6 +87,7 @@ router.post("/place", optionalAuth, async (req, res) => {
       razorpay_payment_id,
       razorpay_signature,
       paid_amount,
+      payment_mode,
     } = req.body;
 
     if (!items || items.length === 0) {
@@ -117,6 +118,7 @@ router.post("/place", optionalAuth, async (req, res) => {
     // Calculate totals
     let subtotal = 0;
     const enrichedItems = [];
+    let mainPooja = null;
 
     for (const item of items) {
       let price, name, image;
@@ -131,6 +133,9 @@ router.post("/place", optionalAuth, async (req, res) => {
         price = parseFloat(pooja.price);
         name = pooja.title;
         image = pooja.image_url;
+        if (!mainPooja) {
+          mainPooja = pooja;
+        }
       } else {
         const idol = await Idol.findByPk(item.item_id);
         if (!idol)
@@ -186,8 +191,19 @@ router.post("/place", optionalAuth, async (req, res) => {
     let advance_amount = 0;
     let pending_amount = 0;
     if (payment_status === "paid") {
-      const numericPaid =
-        typeof paid_amount === "number" ? paid_amount : Number(paid_amount || total_amount);
+      let numericPaid;
+
+      if (order_type === "pooja" && payment_mode === "partial") {
+        const percent =
+          (mainPooja && typeof mainPooja.advance_percent === "number"
+            ? mainPooja.advance_percent
+            : Number(mainPooja && mainPooja.advance_percent)) || 30;
+        numericPaid = Math.round((total_amount * percent) / 100);
+      } else {
+        numericPaid =
+          typeof paid_amount === "number" ? paid_amount : Number(paid_amount || total_amount);
+      }
+
       if (!Number.isFinite(numericPaid) || numericPaid <= 0) {
         return res.status(400).json({
           success: false,
@@ -200,6 +216,7 @@ router.post("/place", optionalAuth, async (req, res) => {
           message: "Paid amount cannot exceed total amount.",
         });
       }
+
       advance_amount = numericPaid;
       pending_amount = Math.max(total_amount - numericPaid, 0);
 
